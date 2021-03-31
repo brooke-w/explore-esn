@@ -29,7 +29,7 @@ class ESN:
                  outFunc = 0,                       #Value represents what function is to be used for output activation
                  outAlg = 0,                        #Which algorithm to calculate Wout
                  B = 1,                             #Beta value for Ridge Regression if used for calculating Wout
-                 distribution = 0,                   #Value represents which type of weight distribution to use
+                 distribution = 0,                  #Value represents which type of weight distribution to use
                  isBias = False,                    #If true, a bias value of 1 will automatically be added to the input vector,
                  isU2Y = True,                      #If true, a connection will be made directly from the input to the output for the prediction calculation
                  isY2Y = False,                     #If true, a connection will be made directly from the output to the output for the prediction calculation
@@ -55,6 +55,7 @@ class ESN:
         self.B = B
         self.distribution = distribution
         self.isU2Y = isU2Y
+        self.isY2Y = isY2Y
         self.isClassification = isClassification
         
         #setting activation functions
@@ -109,9 +110,12 @@ class ESN:
     '''This function generates the reservoir aka the weight matrix W.
     Precondition: all the values for the ESN object have been set
     Postcondition: Weights are saved to the object as W'''
-    def generateW(self):
+    def generateW(self, seed = rand.randint(0,1000)):
+        rand.seed = seed
+        np.random.seed(seed)
+        
         #random graph
-        #N is the number of nodes in the graph and dw is the density or probability a connection is created
+        #N is the number of nodes in the graph and dw is the density or probability a connection is created        
         maxEigen = 0
         while(maxEigen == 0):
             G = nx.gnp_random_graph(self.N, self.dw, directed = True)
@@ -162,55 +166,72 @@ class ESN:
     '''This function generates the inputs weight connections Win.
     Precondition: all the values for the ESN object have been set
     Postcondition: Weights are saved to the object as Win'''
-    def generateWin(self):
-        G = nx.gnp_random_graph(self.N, self.K, self.din, directed = True)
+    def generateWin(self, seed = rand.randint(0,1000)):
+        rand.seed = seed
+        np.random.seed(seed)
+        
+        #create NxK array of zeros
         Win = np.zeros((self.N, self.K))
-        for edge in G.edges:
-            row = edge[0]
-            col = edge[1]
-            Win[row, col] = 1
+        for i in range(0, self.N):
+            for j in range(0, self.K):
+                prob = rand.uniform(0,1)
+                if prob < self.din:
+                    Win[i, j] = rand.uniform(-1, 1)
+        
         #we need to rescale the entries in the matrix to have negative and positive connections
         #use continuous method
         #multiply each non-zero entry by random number in uniform distribution -sigma_1 to sigma_1
-        for i in range(0,self.N):
-            for j in range(0,self.K):
-                    Win[i, j] = Win[i, j] * rand.uniform(-1,1)
+        if self.distribution == 0:                              #uniform
+                for i in range(0,self.N):
+                    for j in range(0,self.K):
+                            Win[i, j] = Win[i, j] * rand.uniform(-1,1)
+        elif self.distribution == 1:                            #discerete bi-valued
+            for i in range(0,self.N):
+                for j in range(0,self.K):
+                    prob = rand.uniform(0,1)
+                    if prob < 0.5:
+                        Win[i, j] = Win[i, j] * -1
+                    #else it's one
+        elif self.distribution == 2:                            #Laplace
+            d = np.random.laplace(0, 1, (self.N,self.K))
+            Win = np.multiply(Win,d)                               #multiply arguments element-wise
         
-        # #create NxK array of zeros
-        # Win = np.zeros((self.N, self.K))
-        # for i in range(0, self.N):
-        #     for j in range(0, self.K):
-        #         prob = rand.uniform(0,1)
-        #         if prob < self.din:
-        #             Win[i, j] = rand.uniform(-1, 1)
-        # self.Win = Win
+        self.Win = Win
         return
     
     '''This function generates the inputs weight connections Win.
     Precondition: all the values for the ESN object have been set
     Postcondition: Weights are saved to the object as Wfb'''
-    def generateWfb(self):
-        G = nx.gnp_random_graph(self.N, self.L, self.dfb, directed = True)
+    def generateWfb(self, seed = rand.randint(0,1000)):
+        rand.seed = seed
+        np.random.seed(seed)
+        
+        #create NxL array of zeros
         Wfb = np.zeros((self.N, self.L))
-        for edge in G.edges:
-            row = edge[0]
-            col = edge[1]
-            Wfb[row, col] = 1
+        for i in range(0, self.N):
+            for j in range(0, self.L):
+                prob = rand.uniform(0,1)
+                if prob < self.dfb:
+                    Wfb[i, j] = rand.uniform(-1*1, 1)
         #we need to rescale the entries in the matrix to have negative and positive connections
         #use continuous method
         #multiply each non-zero entry by random number in uniform distribution -sigma_1 to sigma_1
-        for i in range(0,self.N):
-            for j in range(0,self.L):
-                    Wfb[i, j] = Wfb[i, j] * rand.uniform(-1,1)
+        if self.distribution == 0:                              #uniform
+            for i in range(0,self.N):
+                for j in range(0,self.L):
+                        Wfb[i, j] = Wfb[i, j] * rand.uniform(-1,1)
+        elif self.distribution == 1:                            #discerete bi-valued
+            for i in range(0,self.N):
+                for j in range(0,self.L):
+                    prob = rand.uniform(0,1)
+                    if prob < 0.5:
+                        Wfb[i, j] = Wfb[i, j] * -1
+                    #else it's one
+        elif self.distribution == 2:                            #Laplace
+            d = np.random.laplace(0, 1, (self.N,self.L))
+            Wfb = np.multiply(Wfb,d)                               #multiply arguments element-wise
                     
-        #create NxK array of zeros
-        # Wfb = np.zeros((self.N, self.L))
-        # for i in range(0, self.N):
-        #     for j in range(0, self.L):
-        #         prob = rand.uniform(0,1)
-        #         if prob < self.dfb:
-        #             Wfb[i, j] = rand.uniform(-1*1, 1)
-        # self.Wfb = Wfb
+        self.Wfb = Wfb
         return
 
 
@@ -358,10 +379,11 @@ class ESN:
     def train(self, input_u, teacher, washout):        
         time = np.shape(teacher)[0]                                         #time steps
         
-        if input_u is None:                                                 #for feedback only reservoir
+        if input_u is None and not(self.isBias):                            #for feedback only reservoir
             input_u = np.zeros((time, self.K))
-            
-        if self.isBias:                                                     #if isBias then append a column of ones to input_u
+        elif input_u is None and self.isBias:
+            input_u = np.ones((time, self.K))
+        elif self.isBias:                                                   #if isBias then append a column of ones to input_u
             input_u = np.concatenate((input_u, np.ones((time,1))), axis=1)
         
         r = np.zeros((time-washout, self.L))
@@ -369,7 +391,7 @@ class ESN:
         y = (np.zeros((self.L))).reshape(-1,1)
         
         #send off to appropriate train function based on selections
-        if self.isClassification():
+        if self.isClassification:
             self.trainClassification(time, input_u, teacher, r, x, y, washout)
         else:    
             if not(self.isU2Y) and not(self.isY2Y):
@@ -500,11 +522,11 @@ class ESN:
     the previous train/run.
     Postcondition: Returns predictions'''
     def run(self, input_u, time, washout = 0, state = None):
-        #for feedback only reservoir
-        if input_u is None:
+        if input_u is None and not(self.isBias):                            #for feedback only reservoir
             input_u = np.zeros((time, self.K))
-            
-        if self.isBias:
+        elif input_u is None and self.isBias:
+            input_u = np.ones((time, self.K))
+        elif self.isBias:                                                   #if isBias then append a column of ones to input_u
             input_u = np.concatenate((input_u, np.ones((time,1))), axis=1)
         
         #start state
@@ -519,7 +541,7 @@ class ESN:
         #send off to appropriate run function based on selections
         outputs = np.zeros((time-washout, self.L))
                 #send off to appropriate train function based on selections
-        if self.isClassification():
+        if self.isClassification:
             self.runClassification(time, input_u, outputs, x, y, washout)
         else:    
             if not(self.isU2Y) and not(self.isY2Y):
