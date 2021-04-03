@@ -35,9 +35,9 @@ class ESN:
                  isY2Y = False,                     #If true, a connection will be made directly from the output to the output for the prediction calculation
                  isClassification=False):           #Train an ESN classifier (default is regression)   
         #assignments to object
-        self.W = np.zeros((N, N))
-        self.Win = np.zeros((N,K))
-        self.Wfb = np.zeros((L,N))
+        self.W = None
+        self.Win = None
+        self.Wfb = None
         self.K = K
         self.L = L
         self.N = N
@@ -49,7 +49,6 @@ class ESN:
         self.dfb = dfb
         self.sin = sin
         self.sfb = sfb
-        self.sv = sv 
         self.isBias = isBias
         self.outAlg = outAlg
         self.B = B
@@ -65,9 +64,9 @@ class ESN:
         if isBias:
             self.K = self.K + 1
             
-        self.T = np.zeros((L,L))                #holds teacher data 
-        self.M = np.zeros((N,N+K))              #holds reservour states
-        self.Wout = np.zeros((L,N+K))           #holds output weights
+        self.T = None               #holds teacher data
+        self.M = None              #holds reservour states
+        self.Wout = None           #holds output weights
         
         #Generate all the weights for the model
         self.generateW()
@@ -101,7 +100,7 @@ class ESN:
         elif func == 2:
             actFunc = lambda x: np.sinc(x)       #sinc == 2
             #sinc has no true inverse but an approximation
-            invFunc = lambda x: (1 - 0.035*(x**2)) / (1 + 0.15(x**2) - 0.018(x**4)) #https://math.stackexchange.com/questions/2175174/inverse-sinc-approximation
+            invFunc = lambda x: (1 - 0.035*(x**2)) / (1 + 0.15*(x**2) - 0.018*(x**4)) #https://math.stackexchange.com/questions/2175174/inverse-sinc-approximation
             return actFunc, invFunc
             
         return
@@ -110,16 +109,17 @@ class ESN:
     '''This function generates the reservoir aka the weight matrix W.
     Precondition: all the values for the ESN object have been set
     Postcondition: Weights are saved to the object as W'''
-    def generateW(self, seed = rand.randint(0,1000)):
-        rand.seed = seed
-        np.random.seed(seed)
+    def generateW(self, seed = None):
+        if seed is not(None):
+            rand.seed = seed
+            np.random.seed(seed)
         
         #random graph
         #N is the number of nodes in the graph and dw is the density or probability a connection is created        
         maxEigen = 0
         while(maxEigen == 0):
             G = nx.gnp_random_graph(self.N, self.dw, directed = True)
-            W = self.W
+            W = np.zeros((self.N, self.N))
             for edge in G.edges:
                 row = edge[0]
                 col = edge[1]
@@ -159,52 +159,50 @@ class ESN:
         
         #Scaling of Weight matrix
         W = (self.p / maxEigen) * W
-        #W = (self.p) * W
         self.W = W
         return
     
     '''This function generates the inputs weight connections Win.
     Precondition: all the values for the ESN object have been set
     Postcondition: Weights are saved to the object as Win'''
-    def generateWin(self, seed = rand.randint(0,1000)):
-        rand.seed = seed
-        np.random.seed(seed)
+    def generateWin(self, seed = None):
+        if seed is not(None):
+            rand.seed = seed
+            np.random.seed(seed)
         
         #create NxK array of zeros
         Win = np.zeros((self.N, self.K))
-        for i in range(0, self.N):
-            for j in range(0, self.K):
+        for i in range(0,self.N):
+            for j in range(0,self.K):
                 prob = rand.uniform(0,1)
                 if prob < self.din:
-                    Win[i, j] = rand.uniform(-1, 1)
+                    Win[i, j] = 1
         
         #we need to rescale the entries in the matrix to have negative and positive connections
         #use continuous method
         #multiply each non-zero entry by random number in uniform distribution -sigma_1 to sigma_1
         if self.distribution == 0:                              #uniform
-                for i in range(0,self.N):
-                    for j in range(0,self.K):
-                            Win[i, j] = Win[i, j] * rand.uniform(-1,1)
+            Win[i, j] = np.multiply(Win, np.random.uniform(-1,1, (self.N,self.K))) #multiply arguments element-wise
         elif self.distribution == 1:                            #discerete bi-valued
             for i in range(0,self.N):
                 for j in range(0,self.K):
                     prob = rand.uniform(0,1)
                     if prob < 0.5:
-                        Win[i, j] = Win[i, j] * -1
-                    #else it's one
+                        Win[i, j] = -1
         elif self.distribution == 2:                            #Laplace
             d = np.random.laplace(0, 1, (self.N,self.K))
-            Win = np.multiply(Win,d)                               #multiply arguments element-wise
+            Win = np.multiply(Win,d)                            #multiply arguments element-wise
         
-        self.Win = Win
+        self.Win = self.sin * Win
         return
     
     '''This function generates the inputs weight connections Win.
     Precondition: all the values for the ESN object have been set
     Postcondition: Weights are saved to the object as Wfb'''
-    def generateWfb(self, seed = rand.randint(0,1000)):
-        rand.seed = seed
-        np.random.seed(seed)
+    def generateWfb(self, seed = None):
+        if seed is not(None):
+            rand.seed = seed
+            np.random.seed(seed)
         
         #create NxL array of zeros
         Wfb = np.zeros((self.N, self.L))
@@ -212,14 +210,13 @@ class ESN:
             for j in range(0, self.L):
                 prob = rand.uniform(0,1)
                 if prob < self.dfb:
-                    Wfb[i, j] = rand.uniform(-1*1, 1)
+                    Wfb[i, j] = 1
+                    
         #we need to rescale the entries in the matrix to have negative and positive connections
         #use continuous method
         #multiply each non-zero entry by random number in uniform distribution -sigma_1 to sigma_1
         if self.distribution == 0:                              #uniform
-            for i in range(0,self.N):
-                for j in range(0,self.L):
-                        Wfb[i, j] = Wfb[i, j] * rand.uniform(-1,1)
+            Wfb[i, j] = np.multiply(Wfb, np.random.uniform(-1,1, (self.N,self.L))) #multiply arguments element-wise
         elif self.distribution == 1:                            #discerete bi-valued
             for i in range(0,self.N):
                 for j in range(0,self.L):
@@ -231,7 +228,7 @@ class ESN:
             d = np.random.laplace(0, 1, (self.N,self.L))
             Wfb = np.multiply(Wfb,d)                               #multiply arguments element-wise
                     
-        self.Wfb = Wfb
+        self.Wfb = self.sfb * Wfb
         return
 
 
@@ -250,14 +247,14 @@ class ESN:
         resFunc = self.resFunc                                           #reservoir activation function
         invFunc = self.invFunc                                           #inverse of the output activation function needed for training
         
-        M = np.zeros((time-washout, self.N))                         
+        M = np.zeros((time-washout, self.N))                      
 
         for t in range(0,time):
             u = (input_u[t,:]).reshape(-1,1)
             WdotX = (self.W).dot(x)
             WinDotU = (self.Win).dot(u)
             WfbDotY = (self.Wfb).dot(y)
-            innerTerm = WdotX + WinDotU + WfbDotY + self.sv*self.v[t]
+            innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
             theTanTerm = resFunc(innerTerm)
             secondTerm = self.a * theTanTerm
             x = (1 - self.a) * x + secondTerm
@@ -282,7 +279,7 @@ class ESN:
             WdotX = (self.W).dot(x)
             WinDotU = (self.Win).dot(u)
             WfbDotY = (self.Wfb).dot(y)
-            innerTerm = WdotX + WinDotU + WfbDotY + self.sv*self.v[t]
+            innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
             theTanTerm = resFunc(innerTerm)
             secondTerm = self.a * theTanTerm
             x = (1 - self.a) * x + secondTerm
@@ -299,14 +296,14 @@ class ESN:
     def trainU2Y(self, time, input_u, teacher, r, x, y, washout):   
         resFunc = self.resFunc                                           #reservoir activation function
         invFunc = self.invFunc                                           #inverse of the output activation function needed for training
-        M = np.zeros((time-washout, self.N+self.K))                         
+        M = np.zeros((time-washout, self.N+self.K))                      
         
         for t in range(0,time):
             u = (input_u[t,:]).reshape(-1,1)
             WdotX = (self.W).dot(x)
             WinDotU = (self.Win).dot(u)
             WfbDotY = (self.Wfb).dot(y)
-            innerTerm = WdotX + WinDotU + WfbDotY + self.sv*self.v[t]
+            innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
             theTanTerm = resFunc(innerTerm)
             secondTerm = self.a * theTanTerm
             x = (1 - self.a) * x + secondTerm
@@ -331,7 +328,7 @@ class ESN:
             WdotX = (self.W).dot(x)
             WinDotU = (self.Win).dot(u)
             WfbDotY = (self.Wfb).dot(y)
-            innerTerm = WdotX + WinDotU + WfbDotY + self.sv*self.v[t]
+            innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
             theTanTerm = resFunc(innerTerm)
             secondTerm = self.a * theTanTerm
             x = (1 - self.a) * x + secondTerm
@@ -356,7 +353,7 @@ class ESN:
             WdotX = (self.W).dot(x)
             WinDotU = (self.Win).dot(u)
             WfbDotY = (self.Wfb).dot(y)
-            innerTerm = WdotX + WinDotU + WfbDotY + self.sv*self.v[t]
+            innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
             theTanTerm = resFunc(innerTerm)
             secondTerm = self.a * theTanTerm
             x = (1 - self.a) * x + secondTerm
@@ -409,10 +406,10 @@ class ESN:
             self.Wout = np.transpose((np.linalg.pinv(self.M)).dot(r))
         elif self.outAlg == 1:                                              #ridge regression == 1
             firstTerm =(np.transpose(self.T)).dot(self.M)
-            secondTerm = np.linalg.inv( (np.transpose(self.M)).dot(self.M) + self.B * np.identity(self.N) )
+            secondTerm = np.linalg.inv( (np.transpose(self.M)).dot(self.M) + self.B * np.identity(self.M.shape[1]) )
             self.Wout = firstTerm.dot(secondTerm)
             
-        return self.M, self.T #return state matrix and forced teacher output for each state
+        return self.M, self.Wout #return state matrix and forced teacher output for each state
     
  #  _____               __  __      _   _               _     
  # |  __ \             |  \/  |    | | | |             | |    
@@ -423,15 +420,16 @@ class ESN:
                                                             
                                                             
     '''No transforms on the reservoir state, input and previous output are not used in calculating prediction'''
-    def runBasic(self, time, input_u, outputs, x, y, washout):
+    def runBasic(self, time, input_u, x, y, washout):
         resFunc = self.resFunc                                           #reservoir activation function
         outFunc = self.outFunc 
+        outputs = np.zeros((time-washout, self.L))
         for t in range(0,time):
                 u = (input_u[t]).reshape(-1,1)
                 WdotX = (self.W).dot(x)
                 WinDotU = (self.Win).dot(u)
                 WfbDotY = (self.Wfb).dot(y)
-                innerTerm = WdotX + WinDotU + WfbDotY + self.sv*self.v[t]
+                innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
                 theTanTerm = resFunc(innerTerm)
                 secondTerm = self.a * theTanTerm
                 x = (1 - self.a) * x + secondTerm
@@ -441,15 +439,16 @@ class ESN:
         return outputs
     
     '''No transforms on the reservoir state, input and previous output are not used in calculating prediction'''
-    def runClassification(self, time, input_u, outputs, x, y, washout):
+    def runClassification(self, time, input_u, x, y, washout):
         resFunc = self.resFunc                                           #reservoir activation function
         outFunc = self.outFunc 
+        outputs = np.zeros((time-washout, self.L))
         for t in range(0,time):
                 u = (input_u[t]).reshape(-1,1)
                 WdotX = (self.W).dot(x)
                 WinDotU = (self.Win).dot(u)
                 WfbDotY = (self.Wfb).dot(y)
-                innerTerm = WdotX + WinDotU + WfbDotY + self.sv*self.v[t]
+                innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
                 theTanTerm = resFunc(innerTerm)
                 secondTerm = self.a * theTanTerm
                 x = (1 - self.a) * x + secondTerm
@@ -459,15 +458,16 @@ class ESN:
         return outputs
     
     '''No transform in reservoir state, input is connected to output units'''
-    def runU2Y(self, time, input_u, outputs, x, y, washout):
+    def runU2Y(self, time, input_u, x, y, washout):
         resFunc = self.resFunc                                           #reservoir activation function
         outFunc = self.outFunc                                           #output activation funcion
+        outputs = np.zeros((time-washout, self.L))
         for t in range(0,time):
                 u = (input_u[t]).reshape(-1,1)
                 WdotX = (self.W).dot(x)
                 WinDotU = (self.Win).dot(u)
                 WfbDotY = (self.Wfb).dot(y)
-                innerTerm = WdotX + WinDotU + WfbDotY + self.sv*self.v[t]
+                innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
                 theTanTerm = resFunc(innerTerm)
                 secondTerm = self.a * theTanTerm
                 x = (1 - self.a) * x + secondTerm
@@ -478,15 +478,16 @@ class ESN:
         return outputs
     
         '''input is connected to output units and there are self recurrent connections into the output unit'''
-    def runUY2Y(self, time, input_u, outputs, x, y, washout):
+    def runUY2Y(self, time, input_u, x, y, washout):
         resFunc = self.resFunc                                           #reservoir activation function
         outFunc = self.outFunc                                           #output activation funcion
+        outputs = np.zeros((time-washout, self.L))
         for t in range(0,time):
                 u = (input_u[t]).reshape(-1,1)
                 WdotX = (self.W).dot(x)
                 WinDotU = (self.Win).dot(u)
                 WfbDotY = (self.Wfb).dot(y)
-                innerTerm = WdotX + WinDotU + WfbDotY + self.sv*self.v[t]
+                innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
                 theTanTerm = resFunc(innerTerm)
                 secondTerm = self.a * theTanTerm
                 x = (1 - self.a) * x + secondTerm
@@ -497,15 +498,16 @@ class ESN:
         return outputs
     
     '''self recurrent connections into the output unit'''
-    def runY2Y(self, time, input_u, outputs, x, y, washout):
+    def runY2Y(self, time, input_u, x, y, washout):
         resFunc = self.resFunc                                           #reservoir activation function
         outFunc = self.outFunc                                           #output activation funcion
+        outputs = np.zeros((time-washout, self.L))
         for t in range(0,time):
                 u = (input_u[t]).reshape(-1,1)
                 WdotX = (self.W).dot(x)
                 WinDotU = (self.Win).dot(u)
                 WfbDotY = (self.Wfb).dot(y)
-                innerTerm = WdotX + WinDotU + WfbDotY + self.sv*self.v[t]
+                innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
                 theTanTerm = resFunc(innerTerm)
                 secondTerm = self.a * theTanTerm
                 x = (1 - self.a) * x + secondTerm
@@ -531,27 +533,27 @@ class ESN:
         
         #start state
         if state is None: #Take the last state from training
-            x = (self.M[-1,:]).reshape(-1,1)
-            y = (self.T[-1,:]).reshape(-1,1)
+            x = (self.M[-1,:self.N]).reshape(-1,1)
+            y = (self.T[-1,:self.L]).reshape(-1,1)
         else:
             x = state.reshape(-1,1)
             y = (np.zeros((1,self.L))).reshape(-1,1) 
             #assuming for any chosen state to use previous Y state as zeros this may need changed
 
         #send off to appropriate run function based on selections
-        outputs = np.zeros((time-washout, self.L))
+        outputs = None
                 #send off to appropriate train function based on selections
         if self.isClassification:
-            self.runClassification(time, input_u, outputs, x, y, washout)
+            self.runClassification(time, input_u, x, y, washout)
         else:    
             if not(self.isU2Y) and not(self.isY2Y):
-                self.runBasic(time, input_u, outputs, x, y, washout)
+                outputs = self.runBasic(time, input_u, x, y, washout)
             elif self.isU2Y and not(self.isY2Y):
-                self.runU2Y(time, input_u, outputs, x, y, washout)
+                outputs = self.runU2Y(time, input_u, x, y, washout)
             elif self.isU2Y and self.isY2Y:
-                self.runUY2Y(time, input_u, outputs, x, y, washout)
+                outputs = self.runUY2Y(time, input_u, x, y, washout)
             elif not(self.isU2Y) and self.isY2Y:
-                self.runY2Y(time, input_u, outputs, x, y, washout)
+                outputs = self.runY2Y(time, input_u, x, y, washout)
                 
         return outputs
-    
+

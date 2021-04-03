@@ -7,7 +7,7 @@ Created on Tue Mar 30 12:38:35 2021
 """
 
 import numpy as np
-#import matplotlib.pyplot as plt
+import pandas as pd
 import math
 import time
 from sklearn.metrics import mean_absolute_error as mae
@@ -19,6 +19,9 @@ from argparse import Namespace
 import joblib
 import optuna
 from os import path
+
+j = 18
+k = 27
 
 def nrmse(actual, predicted):
     numSamples = actual.shape[0]
@@ -33,12 +36,12 @@ def runESNSeeded(p,a,dw,dfb,sfb,B,model):
 def objective(trial, args, data, dataval):
     # Parameters (to tune)
     #N = trial.suggest_int('N', 10,100) For Jaeger et al's work we know 20 neurons was sufficient and we can always scale up
-    p = trial.suggest_uniform("p", 0.0, 1.0)
-    a = trial.suggest_uniform("a", 0.0, 1.0)
+    p = trial.suggest_loguniform("p", 0.001, 1.0)
+    a = trial.suggest_loguniform("a", 0.001, 1.0)
     dw = trial.suggest_loguniform("dw", 0.01, 1.0)
     dfb = trial.suggest_uniform("dfb", 0.0, 1.0)
-    sfb = trial.suggest_uniform("sfb",0.10,2.0)
-    B = trial.suggest_uniform("B", 0, 2.0)
+    sfb = trial.suggest_uniform("sfb",0.0,2.0)
+    B = trial.suggest_loguniform("B", 0.001, 2.0)
 
     model = esn(K = args.K,
                 L = args.L,
@@ -68,13 +71,15 @@ def objective(trial, args, data, dataval):
     bestMAE = 100
     bestR2 = 0
     seedUsed = 100
-    for step in range (0,20):
+    for step in range (0,10):
+        model.sv = 0
         model.generateW(seed)
         model.generateWin(seed)
         model.generateWfb(seed)
         seed = seed + 1
         
         model.train(input_u = None, teacher=data, washout=washout)
+        model.sv = 1
         predicted = model.run(input_u=None, time=20000,washout=1000)
         score = nrmse(dataval[1000:], predicted)
         if score < bestNRMSE:
@@ -114,42 +119,45 @@ def main():
     data = np.column_stack((x,y))
     data_val = np.column_stack((x_val,y_val))
     
-    #Parameters that are unchanging during optimization
-    args = Namespace(
-        K = 0,  
-        L = 2,
-        N = 20,
-        v = np.zeros(data.shape[0]+data_val.shape[0]),
-        din = 0,
-        sin = 0,
-        sv = 0,
-        outAlg = 1,  
-        isBias = True,
-        isU2Y = True,      #opt 1/2 architcture
-        isY2Y = False,      #opt 3/2 architcture
-        resFunc = 1,        #opt 4/5 architcture
-        outFunc = 0,        #opt 6/7/8 architcture
-        distribution = 0,   #opt 9/A/B architcture
+    global j, k
+    for i in range(j,k):
+        df = pd.read_excel('Architecture.xlsx').iloc[i,:]
         
-        isClassification = False
-    )
-    
-    # Create a study name:
-    study_name = 'L8-experiment-1469'
-    filename = study_name + ".pkl"
-    
-    if path.exists(filename):
-        study = joblib.load(filename)
-    else:
-        study = optuna.create_study(study_name=study_name)
-    start = time.time() 
-    # Optimize:
-    study.optimize(lambda trial: objective(trial, args, data, data_val), n_trials=100)
-    end = time.time()
-    print("\n")
-    print(end-start)
-    
-    joblib.dump(study, filename)
+        #Parameters that are unchanging during optimization
+        args = Namespace(
+            K = 0,  
+            L = 2,
+            N = 20,
+            v = np.random.uniform(-0.01,0.01,(20000, 20)),
+            din = 0,
+            sin = 0,
+            sv = 0,
+            outAlg = 1,  
+            isBias = True,
+            isU2Y = df.iloc[1],       #opt 1/2 architcture
+            isY2Y = df.iloc[2],      #opt 3/2 architcture
+            resFunc = df.iloc[3],        #opt 4/5 architcture
+            outFunc = df.iloc[4],        #opt 6/7/8 architcture
+            distribution = df.iloc[5],   #opt 9/A/B architcture
+            isClassification = False
+        )
+        
+        # Create a study name:
+        study_name = 'L8-experiment-' + str(df[0])
+        filename = study_name + ".pkl"
+        
+        if path.exists(filename):
+            study = joblib.load(filename)
+        else:
+            study = optuna.create_study(study_name=study_name, sampler = optuna.samplers.TPESampler(seed=0))
+        start = time.time() 
+        # Optimize:
+        study.optimize(lambda trial: objective(trial, args, data, data_val), n_trials=150)
+        end = time.time()
+        print("\n")
+        print(end-start, "seconds")
+        
+        joblib.dump(study, filename)
 
 if __name__ == "__main__":
     main()
