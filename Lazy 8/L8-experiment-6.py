@@ -12,6 +12,7 @@ import math
 import time
 from sklearn.metrics import mean_absolute_error as mae
 from sklearn.metrics import r2_score as r2
+from sklearn.metrics import mean_squared_error as mse
 
 from ESN import ESN as esn
 
@@ -23,12 +24,25 @@ from os import path
 j = 45
 k = 54
 
-def nrmse(actual, predicted):
-    numSamples = actual.shape[0]
-    mse = np.sum((predicted - actual)**2) / (numSamples)
-    rmse = math.sqrt(mse)
-    nmrse = rmse / np.var(actual)
-    return nmrse
+def getScores(actual, predicted): 
+    np.seterr(all='raise')
+    try:
+        mse0 = mse(actual, predicted)
+        rmse = math.sqrt(mse0)
+        nmrse = rmse / np.var(actual)
+        
+        mae0 = mae(actual, predicted)
+        
+        r20 = r2(actual, predicted)
+        
+    except FloatingPointError:
+        print('Exceptionally bad generation of ESN. Aborting sub-trial. (1)')
+        nmrse = 100
+        mae0 = 100
+        r20 = 0
+
+    np.seterr(all='warn')
+    return nmrse, mae0, r20
 
 def runESNSeeded(p,a,dw,dfb,sfb,B,model):
     return model
@@ -36,10 +50,13 @@ def runESNSeeded(p,a,dw,dfb,sfb,B,model):
 def objective(trial, args, data, dataval):
     # Parameters (to tune)
     #N = trial.suggest_int('N', 10,100) For Jaeger et al's work we know 20 neurons was sufficient and we can always scale up
+    np.seterr(all='warn')
     p = trial.suggest_loguniform("p", 0.001, 1.0)
     a = trial.suggest_loguniform("a", 0.001, 1.0)
     dw = trial.suggest_loguniform("dw", 0.01, 1.0)
     dfb = trial.suggest_uniform("dfb", 0.0, 1.0)
+    din = trial.suggest_uniform("din", 0.0, 1.0)
+    sin = trial.suggest_uniform("sfb",0.0,2.0)
     sfb = trial.suggest_uniform("sfb",0.0,2.0)
     B = trial.suggest_loguniform("B", 0.001, 2.0)
 
@@ -50,9 +67,9 @@ def objective(trial, args, data, dataval):
                 a = a,
                 v = args.v,
                 dw = dw,
-                din = args.din,
+                din = din,
                 dfb = dfb,
-                sin = args.sin,
+                sin = sin,
                 sfb = sfb,
                 sv = args.sv,
                 resFunc = args.resFunc,
@@ -67,7 +84,7 @@ def objective(trial, args, data, dataval):
     
     seed = 100
     washout = 1000
-    bestNRMSE = 100
+    bestNRMSE = 1000000
     bestMAE = 100
     bestR2 = 0
     seedUsed = 100
@@ -81,11 +98,16 @@ def objective(trial, args, data, dataval):
         model.train(input_u = None, teacher=data, washout=washout)
         model.sv = 1
         predicted = model.run(input_u=None, time=20000,washout=1000)
-        score = nrmse(dataval[1000:], predicted)
-        if score < bestNRMSE:
-            bestNRMSE = score
-            bestR2 = r2(dataval[1000:], predicted)
-            bestMAE = mae(dataval[1000:], predicted)
+        
+        if np.isnan(np.sum(predicted)):
+            print('Exceptionally bad generation of ESN. Aborting sub-trial. (2)')
+            nmrse = 100
+            return nmrse
+        nrmse0, mae0, r20 = getScores(dataval[1000:], predicted)
+        if nrmse0 < bestNRMSE:
+            bestNRMSE = nrmse0
+            bestR2 = r20
+            bestMAE = mae0
             seedUsed = seed
     
     trial.set_user_attr('seed', seedUsed)
@@ -129,8 +151,6 @@ def main():
             L = 2,
             N = 20,
             v = np.random.uniform(-0.01,0.01,(20000, 20)),
-            din = 0,
-            sin = 0,
             sv = 0,
             outAlg = 1,  
             isBias = True,

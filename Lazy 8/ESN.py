@@ -182,7 +182,8 @@ class ESN:
         #use continuous method
         #multiply each non-zero entry by random number in uniform distribution -sigma_1 to sigma_1
         if self.distribution == 0:                              #uniform
-            Win[i, j] = np.multiply(Win, np.random.uniform(-1,1, (self.N,self.K))) #multiply arguments element-wise
+            randomVals = np.random.uniform(-1,1, (self.N,self.K))
+            Win = Win * randomVals            #multiply arguments element-wise
         elif self.distribution == 1:                            #discerete bi-valued
             for i in range(0,self.N):
                 for j in range(0,self.K):
@@ -191,7 +192,7 @@ class ESN:
                         Win[i, j] = -1
         elif self.distribution == 2:                            #Laplace
             d = np.random.laplace(0, 1, (self.N,self.K))
-            Win = np.multiply(Win,d)                            #multiply arguments element-wise
+            Win = Win*d                              #multiply arguments element-wise
         
         self.Win = self.sin * Win
         return
@@ -216,7 +217,7 @@ class ESN:
         #use continuous method
         #multiply each non-zero entry by random number in uniform distribution -sigma_1 to sigma_1
         if self.distribution == 0:                              #uniform
-            Wfb[i, j] = np.multiply(Wfb, np.random.uniform(-1,1, (self.N,self.L))) #multiply arguments element-wise
+            Wfb = np.multiply(Wfb, np.random.uniform(-1,1, (self.N,self.L))) #multiply arguments element-wise
         elif self.distribution == 1:                            #discerete bi-valued
             for i in range(0,self.N):
                 for j in range(0,self.L):
@@ -424,18 +425,23 @@ class ESN:
         resFunc = self.resFunc                                           #reservoir activation function
         outFunc = self.outFunc 
         outputs = np.zeros((time-washout, self.L))
-        for t in range(0,time):
-                u = (input_u[t]).reshape(-1,1)
-                WdotX = (self.W).dot(x)
-                WinDotU = (self.Win).dot(u)
-                WfbDotY = (self.Wfb).dot(y)
-                innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
-                theTanTerm = resFunc(innerTerm)
-                secondTerm = self.a * theTanTerm
-                x = (1 - self.a) * x + secondTerm
-                y = outFunc(((self.Wout).dot(x)).reshape(-1,1))
-                if t >= washout:
-                    outputs[t-washout,:] = y.reshape(-1,self.L)
+        np.seterr(all='raise')
+        try:
+            for t in range(0,time):
+                    u = (input_u[t]).reshape(-1,1)
+                    WdotX = (self.W).dot(x)
+                    WinDotU = (self.Win).dot(u)
+                    WfbDotY = (self.Wfb).dot(y)
+                    innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
+                    theTanTerm = resFunc(innerTerm)
+                    secondTerm = self.a * theTanTerm
+                    x = (1 - self.a) * x + secondTerm
+                    y = outFunc(((self.Wout).dot(x)).reshape(-1,1))
+                    if t >= washout:
+                        outputs[t-washout,:] = y.reshape(-1,self.L)
+        except FloatingPointError:
+            print('Exceptionally bad generation of ESN. Aborting sub-trial. (1)')
+            output[:,:] = np.nan()
         return outputs
     
     '''No transforms on the reservoir state, input and previous output are not used in calculating prediction'''
@@ -477,24 +483,29 @@ class ESN:
                     outputs[t-washout,:] = y.reshape(-1,self.L)
         return outputs
     
-        '''input is connected to output units and there are self recurrent connections into the output unit'''
+    '''input is connected to output units and there are self recurrent connections into the output unit'''
     def runUY2Y(self, time, input_u, x, y, washout):
         resFunc = self.resFunc                                           #reservoir activation function
         outFunc = self.outFunc                                           #output activation funcion
         outputs = np.zeros((time-washout, self.L))
-        for t in range(0,time):
-                u = (input_u[t]).reshape(-1,1)
-                WdotX = (self.W).dot(x)
-                WinDotU = (self.Win).dot(u)
-                WfbDotY = (self.Wfb).dot(y)
-                innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
-                theTanTerm = resFunc(innerTerm)
-                secondTerm = self.a * theTanTerm
-                x = (1 - self.a) * x + secondTerm
-                uxy = np.concatenate((u, x, y), axis=0)
-                y = outFunc(((self.Wout).dot(uxy)).reshape(-1,1))
-                if t >= washout:
-                    outputs[t-washout,:] = y.reshape(-1,self.L)
+        np.seterr(all='raise')
+        try:
+            for t in range(0,time):
+                    u = (input_u[t]).reshape(-1,1)
+                    WdotX = (self.W).dot(x)
+                    WinDotU = (self.Win).dot(u)
+                    WfbDotY = (self.Wfb).dot(y)
+                    innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
+                    theTanTerm = resFunc(innerTerm)
+                    secondTerm = self.a * theTanTerm
+                    x = (1 - self.a) * x + secondTerm
+                    uxy = np.concatenate((u, x, y), axis=0)
+                    y = outFunc(((self.Wout).dot(uxy)).reshape(-1,1))
+                    if t >= washout:
+                        outputs[t-washout,:] = y.reshape(-1,self.L)
+        except FloatingPointError:
+            print('Exceptionally bad generation of ESN. Aborting sub-trial. (1)')
+            outputs[:,:] = np.nan
         return outputs
     
     '''self recurrent connections into the output unit'''
