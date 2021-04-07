@@ -22,7 +22,7 @@ import optuna
 from os import path
 
 j = 0
-k = 9
+k = 12
 
 def getScores(actual, predicted): 
     np.seterr(all='raise')

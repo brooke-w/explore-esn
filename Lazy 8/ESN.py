@@ -426,22 +426,18 @@ class ESN:
         outFunc = self.outFunc 
         outputs = np.zeros((time-washout, self.L))
         np.seterr(all='raise')
-        try:
-            for t in range(0,time):
-                    u = (input_u[t]).reshape(-1,1)
-                    WdotX = (self.W).dot(x)
-                    WinDotU = (self.Win).dot(u)
-                    WfbDotY = (self.Wfb).dot(y)
-                    innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
-                    theTanTerm = resFunc(innerTerm)
-                    secondTerm = self.a * theTanTerm
-                    x = (1 - self.a) * x + secondTerm
-                    y = outFunc(((self.Wout).dot(x)).reshape(-1,1))
-                    if t >= washout:
-                        outputs[t-washout,:] = y.reshape(-1,self.L)
-        except FloatingPointError:
-            print('Exceptionally bad generation of ESN. Aborting sub-trial. (1)')
-            output[:,:] = np.nan()
+        for t in range(0,time):
+                u = (input_u[t]).reshape(-1,1)
+                WdotX = (self.W).dot(x)
+                WinDotU = (self.Win).dot(u)
+                WfbDotY = (self.Wfb).dot(y)
+                innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
+                theTanTerm = resFunc(innerTerm)
+                secondTerm = self.a * theTanTerm
+                x = (1 - self.a) * x + secondTerm
+                y = outFunc(((self.Wout).dot(x)).reshape(-1,1))
+                if t >= washout:
+                    outputs[t-washout,:] = y.reshape(-1,self.L)
         return outputs
     
     '''No transforms on the reservoir state, input and previous output are not used in calculating prediction'''
