@@ -118,7 +118,7 @@ class ESN:
         #N is the number of nodes in the graph and dw is the density or probability a connection is created        
         maxEigen = 0
         while(maxEigen == 0):
-            G = nx.gnp_random_graph(self.N, self.dw, directed = True)
+            G = nx.gnp_random_graph(self.N, self.dw, directed = True, seed=seed)
             W = np.zeros((self.N, self.N))
             for edge in G.edges:
                 row = edge[0]
@@ -426,18 +426,23 @@ class ESN:
         outFunc = self.outFunc 
         outputs = np.zeros((time-washout, self.L))
         np.seterr(all='raise')
-        for t in range(0,time):
-                u = (input_u[t]).reshape(-1,1)
-                WdotX = (self.W).dot(x)
-                WinDotU = (self.Win).dot(u)
-                WfbDotY = (self.Wfb).dot(y)
-                innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
-                theTanTerm = resFunc(innerTerm)
-                secondTerm = self.a * theTanTerm
-                x = (1 - self.a) * x + secondTerm
-                y = outFunc(((self.Wout).dot(x)).reshape(-1,1))
-                if t >= washout:
-                    outputs[t-washout,:] = y.reshape(-1,self.L)
+        try:
+            for t in range(0,time):
+                    u = (input_u[t]).reshape(-1,1)
+                    WdotX = (self.W).dot(x)
+                    WinDotU = (self.Win).dot(u)
+                    WfbDotY = (self.Wfb).dot(y)
+                    innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
+                    theTanTerm = resFunc(innerTerm)
+                    secondTerm = self.a * theTanTerm
+                    x = (1 - self.a) * x + secondTerm
+                    y = outFunc(((self.Wout).dot(x)).reshape(-1,1))
+                    if t >= washout:
+                        outputs[t-washout,:] = y.reshape(-1,self.L)
+        except FloatingPointError:
+            print('Exceptionally bad generation of ESN. Aborting sub-trial. (1)')
+            outputs[:,:] = np.nan
+        np.seterr(all='warn')
         return outputs
     
     '''No transforms on the reservoir state, input and previous output are not used in calculating prediction'''
@@ -464,19 +469,25 @@ class ESN:
         resFunc = self.resFunc                                           #reservoir activation function
         outFunc = self.outFunc                                           #output activation funcion
         outputs = np.zeros((time-washout, self.L))
-        for t in range(0,time):
-                u = (input_u[t]).reshape(-1,1)
-                WdotX = (self.W).dot(x)
-                WinDotU = (self.Win).dot(u)
-                WfbDotY = (self.Wfb).dot(y)
-                innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
-                theTanTerm = resFunc(innerTerm)
-                secondTerm = self.a * theTanTerm
-                x = (1 - self.a) * x + secondTerm
-                ux = np.concatenate((u, x), axis=0)
-                y = outFunc(((self.Wout).dot(ux)).reshape(-1,1))
-                if t >= washout:
-                    outputs[t-washout,:] = y.reshape(-1,self.L)
+        np.seterr(all='raise')
+        try:
+            for t in range(0,time):
+                    u = (input_u[t]).reshape(-1,1)
+                    WdotX = (self.W).dot(x)
+                    WinDotU = (self.Win).dot(u)
+                    WfbDotY = (self.Wfb).dot(y)
+                    innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
+                    theTanTerm = resFunc(innerTerm)
+                    secondTerm = self.a * theTanTerm
+                    x = (1 - self.a) * x + secondTerm
+                    ux = np.concatenate((u, x), axis=0)
+                    y = outFunc(((self.Wout).dot(ux)).reshape(-1,1))
+                    if t >= washout:
+                        outputs[t-washout,:] = y.reshape(-1,self.L)
+        except FloatingPointError:
+            print('Exceptionally bad generation of ESN. Aborting sub-trial. (1)')
+            outputs[:,:] = np.nan
+        np.seterr(all='warn')
         return outputs
     
     '''input is connected to output units and there are self recurrent connections into the output unit'''
@@ -502,6 +513,7 @@ class ESN:
         except FloatingPointError:
             print('Exceptionally bad generation of ESN. Aborting sub-trial. (1)')
             outputs[:,:] = np.nan
+        np.seterr(all='warn')
         return outputs
     
     '''self recurrent connections into the output unit'''
@@ -509,19 +521,25 @@ class ESN:
         resFunc = self.resFunc                                           #reservoir activation function
         outFunc = self.outFunc                                           #output activation funcion
         outputs = np.zeros((time-washout, self.L))
-        for t in range(0,time):
-                u = (input_u[t]).reshape(-1,1)
-                WdotX = (self.W).dot(x)
-                WinDotU = (self.Win).dot(u)
-                WfbDotY = (self.Wfb).dot(y)
-                innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
-                theTanTerm = resFunc(innerTerm)
-                secondTerm = self.a * theTanTerm
-                x = (1 - self.a) * x + secondTerm
-                xy = np.concatenate((x,y), axis=0)
-                y = outFunc(((self.Wout).dot(xy)).reshape(-1,1))
-                if t >= washout:
-                    outputs[t-washout,:] = y.reshape(-1,self.L)
+        np.seterr(all='raise')
+        try:
+            for t in range(0,time):
+                    u = (input_u[t]).reshape(-1,1)
+                    WdotX = (self.W).dot(x)
+                    WinDotU = (self.Win).dot(u)
+                    WfbDotY = (self.Wfb).dot(y)
+                    innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
+                    theTanTerm = resFunc(innerTerm)
+                    secondTerm = self.a * theTanTerm
+                    x = (1 - self.a) * x + secondTerm
+                    xy = np.concatenate((x,y), axis=0)
+                    y = outFunc(((self.Wout).dot(xy)).reshape(-1,1))
+                    if t >= washout:
+                        outputs[t-washout,:] = y.reshape(-1,self.L)
+        except FloatingPointError:
+            print('Exceptionally bad generation of ESN. Aborting sub-trial. (1)')
+            outputs[:,:] = np.nan
+        np.seterr(all='warn')
         return outputs
     
     '''Call this function with ESN object to get a prediction

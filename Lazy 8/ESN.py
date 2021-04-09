@@ -109,16 +109,16 @@ class ESN:
     '''This function generates the reservoir aka the weight matrix W.
     Precondition: all the values for the ESN object have been set
     Postcondition: Weights are saved to the object as W'''
-    def generateW(self, seed = None):
-        if seed is not(None):
-            rand.seed = seed
-            np.random.seed(seed)
+    def generateW(self, myseed = None):
+        if myseed is not(None):
+            rand.seed(myseed)
+            np.random.seed(myseed)
         
         #random graph
         #N is the number of nodes in the graph and dw is the density or probability a connection is created        
         maxEigen = 0
         while(maxEigen == 0):
-            G = nx.gnp_random_graph(self.N, self.dw, directed = True)
+            G = nx.gnp_random_graph(self.N, self.dw, directed = True, seed=myseed)
             W = np.zeros((self.N, self.N))
             for edge in G.edges:
                 row = edge[0]
@@ -130,7 +130,7 @@ class ESN:
             if self.distribution == 0:                              #uniform
                 for i in range(0,self.N):
                     for j in range(0,self.N):
-                            W[i, j] = W[i, j] * rand.uniform(-1,1)
+                        W[i, j] = W[i, j] * rand.uniform(-1,1)
             elif self.distribution == 1:                            #discerete bi-valued
                 for i in range(0,self.N):
                     for j in range(0,self.N):
@@ -165,10 +165,10 @@ class ESN:
     '''This function generates the inputs weight connections Win.
     Precondition: all the values for the ESN object have been set
     Postcondition: Weights are saved to the object as Win'''
-    def generateWin(self, seed = None):
-        if seed is not(None):
-            rand.seed = seed
-            np.random.seed(seed)
+    def generateWin(self, myseed = None):
+        if myseed is not(None):
+            rand.seed(myseed)
+            np.random.seed(myseed)
         
         #create NxK array of zeros
         Win = np.zeros((self.N, self.K))
@@ -200,10 +200,10 @@ class ESN:
     '''This function generates the inputs weight connections Win.
     Precondition: all the values for the ESN object have been set
     Postcondition: Weights are saved to the object as Wfb'''
-    def generateWfb(self, seed = None):
-        if seed is not(None):
-            rand.seed = seed
-            np.random.seed(seed)
+    def generateWfb(self, myseed = None):
+        if myseed is not(None):
+            rand.seed(myseed)
+            np.random.seed(myseed)
         
         #create NxL array of zeros
         Wfb = np.zeros((self.N, self.L))

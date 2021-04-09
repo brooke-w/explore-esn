@@ -73,7 +73,7 @@ def objective(trial, args, trainin, trainout, testin, testout):
     dw = trial.suggest_loguniform("dw", 0.01, 1.0)
     dfb = trial.suggest_uniform("dfb", 0.0, 1.0)
     din = trial.suggest_uniform("din", 0.0, 1.0)
-    sin = trial.suggest_uniform("sfb",0.0,2.0)
+    sin = trial.suggest_uniform("sin",0.0,2.0)
     B = trial.suggest_loguniform("B", 0.001, 2.0)
 
     model = esn(K = args.K,
