@@ -29,7 +29,6 @@ def getScores(actual, predicted):
     try:
         mse0 = mse(actual, predicted)
         rmse = math.sqrt(mse0)
-        nmrse = rmse / np.var(actual)
         
         mae0 = mae(actual, predicted)
         
@@ -37,12 +36,18 @@ def getScores(actual, predicted):
         
     except FloatingPointError:
         print('Exceptionally bad generation of ESN. Aborting sub-trial. (1)')
-        nmrse = 100
+        rmse = 100
+        mae0 = 100
+        r20 = 0
+        
+    except ValueError:
+        print('Exceptionally bad generation of ESN. Aborting sub-trial. (3)')
+        rmse = 100
         mae0 = 100
         r20 = 0
 
     np.seterr(all='warn')
-    return nmrse, mae0, r20
+    return rmse, mae0, r20
 
 def narma10(x):
     """ tenth-order NARMA system applied to the input signal
@@ -69,12 +74,13 @@ def get_esn_data(x,y,trainsize,testsize,inscale=1.,inshift=0.):
 
 def objective(trial, args, trainin, trainout, testin, testout):
     # Parameters (to tune)
-    p = trial.suggest_loguniform("p", 0.009, 1.0)
-    a = trial.suggest_loguniform("a", 0.009, 1.0)
-    dw = trial.suggest_loguniform("dw", 0.01, 1.0)
-    dfb = trial.suggest_uniform("dfb", 0.0, 1.0)
+    #N = trial.suggest_int('N', 10,100) For Jaeger et al's work we know 20 neurons was sufficient and we can always scale up
+    np.seterr(all='warn')
+    p = trial.suggest_uniform("p", 0.02, 1.0)
+    a = trial.suggest_uniform("a", 0.02, 1.0)
+    dw = trial.suggest_loguniform("dw", 0.05, 1.0)
     din = trial.suggest_uniform("din", 0.0, 1.0)
-    sin = trial.suggest_uniform("sin",0.0,2.0)
+    sin = trial.suggest_loguniform("sin",0.05,2.0)
     B = trial.suggest_loguniform("B", 0.001, 2.0)
 
     model = esn(K = args.K,
@@ -85,7 +91,7 @@ def objective(trial, args, trainin, trainout, testin, testout):
                 v = args.v,
                 dw = dw,
                 din = din,
-                dfb = dfb,
+                dfb = args.dfb,
                 sin = sin,
                 sfb = args.sfb,
                 sv = args.sv,
@@ -101,37 +107,48 @@ def objective(trial, args, trainin, trainout, testin, testout):
     
     seed = 100
     washout = 200
-    bestNRMSE = 1000000
+    bestRMSE = 1000000
     bestMAE = 100
     bestR2 = 0
     seedUsed = 100
+    rmse0, mae0, r20 = 0,0,0
+    startState = np.zeros((1,args.N))
     for step in range (0,10):
-        model.sv = 0
+        np.seterr(all='warn')
+        model.sv = args.sv
         model.generateW(seed)
         model.generateWin(seed)
         model.generateWfb(seed)
-        seed = seed + 1
         
         model.train(input_u = trainin, teacher=trainout, washout=washout)
-        model.sv = 1
-        predicted = model.run(input_u=testin, time=testin.shape[0], washout=washout)
+
+        model.sv = 0
+        predicted = model.run(input_u=testin, time=testin.shape[0],washout=washout, state=startState)
         
         if np.isnan(np.min(predicted)):
             print('Exceptionally bad generation of ESN. Aborting sub-trial. (2)')
-            nmrse = 100
-            return nmrse
-        nrmse0, mae0, r20 = getScores(testout[washout:,:], predicted)
-        if nrmse0 < bestNRMSE:
-            bestNRMSE = nrmse0
+            rmse0 = 100
+        else:
+            rmse0, mae0, r20 = getScores(testout[washout:], predicted)
+        if rmse0 < bestRMSE:
+            bestRMSE = rmse0
             bestR2 = r20
             bestMAE = mae0
             seedUsed = seed
-    
+            
+        seed = seed + 1
     trial.set_user_attr('seed', seedUsed)
-    trial.set_user_attr('NRMSE', bestNRMSE)
+    trial.set_user_attr('rmse', bestRMSE)
     trial.set_user_attr('MAE', bestMAE)
     trial.set_user_attr('R2', bestR2)
-    return bestNRMSE
+    trial.set_user_attr('isU2Y', args.isU2Y)
+    trial.set_user_attr('isY2Y', args.isY2Y)
+    trial.set_user_attr('resFunc', args.resFunc)
+    trial.set_user_attr('outFunc', args.outFunc)
+    trial.set_user_attr('distribution', args.distribution)
+    
+    np.seterr(all='warn')
+    return bestRMSE
 
 def main():
     #Generate Data
@@ -140,6 +157,7 @@ def main():
     
     # generate train/test signals
     size = trainsize+testsize+50
+    np.random.seed(0)
     x = (np.random.uniform(0,0.5, size)).reshape(-1,1) #from the text
     y = (narma10(x)).reshape(-1,1)               #from the text
     
@@ -153,7 +171,7 @@ def main():
     global j,k
     for i in range(j,k):
         df = pd.read_excel('Architecture.xlsx').iloc[i,:]
-        
+        np.random.seed(0)
         #Parameters that are unchanging during optimization
         args = Namespace(
             K = 1,  
@@ -162,6 +180,7 @@ def main():
             v = (np.random.uniform(-1,1, size)).reshape(-1,1), #from text
             sv = 0.0001,                #From text
             sfb = 0,                    #No feedback required
+            dfb = 0,
             outAlg = 1,  
             isBias = True,              
             isU2Y = df.iloc[1],         #opt 1/2 architcture

@@ -49,6 +49,7 @@ class ESN:
         self.dfb = dfb
         self.sin = sin
         self.sfb = sfb
+        self.sv = sv
         self.isBias = isBias
         self.outAlg = outAlg
         self.B = B

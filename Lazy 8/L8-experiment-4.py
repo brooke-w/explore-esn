@@ -28,8 +28,7 @@ def getScores(actual, predicted):
     np.seterr(all='raise')
     try:
         mse0 = mse(actual, predicted)
-        rmse = math.sqrt(mse0)
-        nmrse = rmse / np.var(actual)
+        rmse = np.sqrt(mse0)
         
         mae0 = mae(actual, predicted)
         
@@ -37,12 +36,18 @@ def getScores(actual, predicted):
         
     except FloatingPointError:
         print('Exceptionally bad generation of ESN. Aborting sub-trial. (1)')
-        nmrse = 100
+        rmse = 100
+        mae0 = 100
+        r20 = 0
+        
+    except ValueError:
+        print('Exceptionally bad generation of ESN. Aborting sub-trial. (3)')
+        rmse = 100
         mae0 = 100
         r20 = 0
 
     np.seterr(all='warn')
-    return nmrse, mae0, r20
+    return rmse, mae0, r20
 
 def runESNSeeded(p,a,dw,dfb,sfb,B,model):
     return model
@@ -84,11 +89,11 @@ def objective(trial, args, data, dataval):
     
     seed = 100
     washout = 1000
-    bestNRMSE = 1000000
+    bestRMSE = 1000000
     bestMAE = 100
     bestR2 = 0
     seedUsed = 100
-    nrmse0, mae0, r20 = 0,0,0
+    rmse0, mae0, r20 = 0,0,0
     for step in range (0,10):
         np.seterr(all='warn')
         model.sv = 0
@@ -102,18 +107,18 @@ def objective(trial, args, data, dataval):
         
         if np.isnan(np.min(predicted)):
             print('Exceptionally bad generation of ESN. Aborting sub-trial. (2)')
-            nrmse0 = 100
+            rmse0 = 100
         else:
-            nrmse0, mae0, r20 = getScores(dataval[1000:], predicted)
-        if nrmse0 < bestNRMSE:
-            bestNRMSE = nrmse0
+            rmse0, mae0, r20 = getScores(dataval[1000:], predicted)
+        if rmse0 < bestRMSE:
+            bestRMSE = rmse0
             bestR2 = r20
             bestMAE = mae0
             seedUsed = seed
             
         seed = seed + 1
     trial.set_user_attr('seed', seedUsed)
-    trial.set_user_attr('NRMSE', bestNRMSE)
+    trial.set_user_attr('rmse', bestRMSE)
     trial.set_user_attr('MAE', bestMAE)
     trial.set_user_attr('R2', bestR2)
     trial.set_user_attr('isU2Y', args.isU2Y)
@@ -123,7 +128,7 @@ def objective(trial, args, data, dataval):
     trial.set_user_attr('distribution', args.distribution)
     
     np.seterr(all='warn')
-    return bestNRMSE
+    return bestRMSE
 
 def main():
     #Generate Figure 8 Data

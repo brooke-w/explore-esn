@@ -1,0 +1,95 @@
+np.random.seed(0)
+K = 1
+L = 1
+N = 100                    #From text
+v = (np.random.uniform(-1,1, size)).reshape(-1,1) #from text
+sv = 0.0001                #From text
+sfb = 0                    #No feedback required
+dfb = 0
+outAlg = 1  
+isBias = True
+washout = 200
+startState = np.zeros((1,N))
+
+inc = 100
+x = np.arange(50,1051,inc) #Number of Neurons
+y = np.zeros((11,1))       #Holds scores for different neuron sizes
+scores = np.zeros((15,1))  #Holds scores for multiple evaluations of single neuron size
+plotInfo1 = pd.DataFrame()
+count = 1
+
+
+i = studies.loc[studies.iloc[:,0] == 'study_256A'].index[0]
+while(count < 3): #Select models for evaluation
+    N = 50
+    startState = np.zeros((1,N))
+    p = studies.iloc[i,2].params['p']
+    a = studies.iloc[i,2].params['a']
+    dw = studies.iloc[i,2].params['dw']
+    din = studies.iloc[i,2].params['din']
+    sin = studies.iloc[i,2].params['sin']
+    B = studies.iloc[i,2].params['B']
+    isU2Y = studies.iloc[i,2].user_attrs['isU2Y']
+    isY2Y = studies.iloc[i,2].user_attrs['isY2Y']
+    resFunc = count
+    outFunc = studies.iloc[i,2].user_attrs['outFunc']
+    distribution = studies.iloc[i,2].user_attrs['distribution']
+    
+    washout = 1000
+    for j in range(0,11):#This is for increasing neurons for a particular model instantiation
+        startState = np.zeros((1,N))
+        seed = 100
+        for k in range(0,15):#This is for gathering multiple samples for an instatiation with N neurons
+            model = esn(K = K,
+                L = L,
+                N = N,
+                p = p,
+                a = a,
+                v = v,
+                dw = dw,
+                din = din,
+                dfb = dfb,
+                sin = sin,
+                sfb = sfb,
+                sv = sv,
+                resFunc = resFunc,
+                outFunc = outFunc,
+                outAlg = outAlg,
+                B = B,
+                distribution = distribution,
+                isBias = isBias,
+                isU2Y = isU2Y,
+                isY2Y = isY2Y,
+                isClassification = isClassification)
+
+            model.sv = sv
+            model.generateW(seed)
+            model.generateWin(seed)
+            model.generateWfb(seed)
+
+            model.train(input_u = trainin, teacher=trainout, washout=washout)
+
+            model.sv = 0
+            predicted = model.run(input_u=testin, time=testin.shape[0],washout=washout, state=startState)
+
+            nrmse0, mae0, r20 = getScores(testout[washout:], predicted)
+            scores[k,0] = nrmse0
+            seed = seed + 1
+            #print("Score received")
+            del model
+        #Remove outliers
+        mean = np.mean(scores)
+        standard_deviation = np.std(scores)
+        distance_from_mean = abs(scores - mean)
+        max_deviations = 2
+        not_outlier = distance_from_mean < max_deviations * standard_deviation
+        no_outliers = scores[not_outlier]
+
+        #average scores together
+        nrmse0 = np.mean(no_outliers)
+        y[j,0] = nrmse0
+        
+        #Increment N for next evaluation
+        N = N + inc # We will build different size models in increments of 50 neurons
+    plotInfo1 = pd.concat((plotInfo1, pd.DataFrame(y, columns=[str(count)])), axis=1)
+    count = count + 1
