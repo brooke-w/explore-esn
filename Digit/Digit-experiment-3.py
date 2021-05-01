@@ -20,8 +20,8 @@ import joblib
 import optuna
 from os import path
 
-j = 0
-k = 12
+j = 24
+k = 36
 
 def getScores(actual, predicted): 
     np.seterr(all='raise')

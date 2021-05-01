@@ -67,6 +67,7 @@ def ttvSplit(data, numClasses):
     validT = targets.loc[targets.index.isin(validation.index)]
 
     return training.to_numpy(), trainingT.to_numpy(), test.to_numpy(), testT.to_numpy(), validation.to_numpy(), validT.to_numpy()
+
 np.random.seed(0)
 df = pd.read_csv('data.csv')
 #df = df.loc[df.iloc[:,-1].isin([0,9])]
