@@ -72,10 +72,10 @@ def objective(trial, args, trainin, testin):
     np.seterr(all='warn')
     p = trial.suggest_uniform("p", 0.02, 1.0)
     a = trial.suggest_loguniform("a", 0.02, 1.0)
-    dw = trial.suggest_loguniform("dw", 0.01, 1.0)
+    dw = trial.suggest_loguniform("dw", 0.10, 1.0)
+    dfb = trial.suggest_uniform("dfb", 0.10, 1.0)
     din = trial.suggest_uniform("din", 0.0, 1.0)
     sin = trial.suggest_uniform("sin",0.0,2.0)
-    dfb = trial.suggest_uniform("dfb", 0.0, 1.0)
     sfb = trial.suggest_uniform("sfb",0.0,2.0)
     B = trial.suggest_loguniform("B", 1e-9, 2.0)
 
@@ -110,30 +110,20 @@ def objective(trial, args, trainin, testin):
     rmse0, mae0, r20 = 0,0,0
     for step in range (0,10):
         np.seterr(all='warn')
-        '''
-        The network was run from a zero starting state in 
-        teacher-forced mode with the τ = 17, length 3000 training sequence. 
-        During this run, noise was inserted... The first 1000 steps were 
-        discarded and the output weights were computed by a linear regression from the remaining 2000 network states.'''
         model.generateW(seed)
         model.generateWin(seed)
         model.generateWfb(seed)
         
         model.train(input_u = None, teacher=trainin, washout=washout) #zero start state is default
         
-        '''the trained network was run for 4000 steps. The first 1000 steps were teacher-forced with 
-        a newly generated sequence from the original system. The network output of the remaining 
-        free-running 3000 steps was re-transformed to the original coordi- nates by y 􏰀→ arctanh(y) + 1.'''
-        
-        #doesn't say to remove noise so I left it
-        predicted = model.run(input_u=None, time=testin.shape[0], washout=washout)
+        predicted = model.run(input_u=None, time=testin.shape[0])
         transformed = np.arctan(predicted) + 1
         
         if np.isnan(np.min(transformed)):
             print('Exceptionally bad generation of ESN. Aborting sub-trial. (2)')
             rmse0 = 100
         else:
-            rmse0, mae0, r20 = getScores(trainin[washout:], transformed)
+            rmse0, mae0, r20 = getScores(testin, transformed)
         if rmse0 < bestRMSE:
             bestRMSE = rmse0
             bestR2 = r20
@@ -166,16 +156,6 @@ def main():
     trainin = transformedY[:trainsize,:]
     testin = y[trainsize:,:]
     
-    # z = np.arange(0, 500)
-
-    # fig, ax = plt.subplots()
-    # ax.plot(z, y[0:500,0])
-    # ax.set(xlabel='Time Step', 
-    #        ylabel='Mackey-Glass 17',
-    #        title='Mackey-Glass Training Data')
-    # ax.legend()
-
-    
     global j,k
     for i in range(j,k):
         df = pd.read_excel('Architecture.xlsx').iloc[i,:]
@@ -184,16 +164,16 @@ def main():
         args = Namespace(
             K = 0,  
             L = 1,
-            N = 300,                    
-            v = (np.random.uniform(-1,1, testsize)).reshape(-1,1), #from text
-            sv = 0,                     #Don't need using ridge
+            N = 300,
+            v = (np.random.uniform(-1,1, testsize)).reshape(-1,1),
+            sv = 0,
             outAlg = 1,  
-            isBias = True,              
-            isU2Y = df.iloc[1],         #opt 1/2 architcture
-            isY2Y = df.iloc[2],         #opt 3/2 architcture
-            resFunc = df.iloc[3],       #opt 4/5 architcture
-            outFunc = df.iloc[4],       #opt 6/7/8 architcture
-            distribution = df.iloc[5],  #opt 9/A/B architcture
+            isBias = True,
+            isU2Y = df.iloc[1],       #opt 1/2 architcture
+            isY2Y = df.iloc[2],      #opt 3/2 architcture
+            resFunc = df.iloc[3],        #opt 4/5 architcture
+            outFunc = df.iloc[4],        #opt 6/7/8 architcture
+            distribution = df.iloc[5],   #opt 9/A/B architcture
             isClassification = False
         )
         

@@ -115,18 +115,18 @@ a newly generated sequence from the original system. The network output of the r
 free-running 3000 steps was re-transformed to the original coordi- nates by y 􏰀→ arctanh(y) + 1.'''
 
 #doesn't say to remove noise so I left it
-predicted = model.run(input_u=None, time=testin.shape[0], washout=washout)
+predicted = model.run(input_u=None, time=testin.shape[0])
 transformed = np.arctan(predicted) + 1
 
-rmse0, mae0, r20 = getScores(testin[washout:,:], transformed)
+rmse0, mae0, r20 = getScores(testin[:,:], transformed)
 print(rmse0)
 print(r20)
 print(mae0)
 
-z = np.arange(0, testsize-washout)
+z = np.arange(0, testsize)
 fig, ax = plt.subplots()
 ax.plot(z, transformed[:,0], 'b', label='Predicted(w/ Transform)')
-ax.plot(z, testin[washout:,0], 'r',label='actual')
+ax.plot(z, testin[:,0], 'r',label='actual')
 ax.set(xlabel='Time Step', 
        ylabel='Mackey-Glass 17',
        title='Mackey-Glass Training Data')
