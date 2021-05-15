@@ -217,7 +217,7 @@ def main():
             study = optuna.create_study(study_name=study_name, sampler = optuna.samplers.TPESampler(seed=0), direction='maximize')
         start = time.time() 
         # Optimize:
-        study.optimize(lambda trial: objective(trial, args, trainin, trainout, testin, testout), n_trials=10)
+        study.optimize(lambda trial: objective(trial, args, trainin, trainout, testin, testout), n_trials=50)
         end = time.time()
         print("\n")
         print(end-start, "seconds")
