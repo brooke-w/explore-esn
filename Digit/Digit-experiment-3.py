@@ -183,6 +183,8 @@ def main():
     df = esnClassRep(df,numClasses)
     trainin, trainout, testin, testout, valin, valout = ttvSplit(df, numClasses)
     testout = compressTargets(testin, testout)
+    trainoutT = np.tanh(trainout) #The inverse arctanh function is not defined for 1 so transforming the outputs allows use of tanh reservoir activation for training
+    #We don't have to undo the transform because the ESN classifier automatically rounds and returns one for the best choice class
     
     global j,k
     for i in range(j,k):
@@ -217,7 +219,7 @@ def main():
             study = optuna.create_study(study_name=study_name, sampler = optuna.samplers.TPESampler(seed=0), direction='maximize')
         start = time.time() 
         # Optimize:
-        study.optimize(lambda trial: objective(trial, args, trainin, trainout, testin, testout), n_trials=50)
+        study.optimize(lambda trial: objective(trial, args, trainin, trainoutT, testin, testout), n_trials=50)
         end = time.time()
         print("\n")
         print(end-start, "seconds")

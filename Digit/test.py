@@ -103,7 +103,8 @@ model.generateW(seed)
 model.generateWin(seed)
 model.generateWfb(seed)
 
-model.train(input_u = trainin, teacher=trainout, washout=washout) #zero start state is default
+trainOutT = np.tanh(trainout)
+model.train(input_u = trainin, teacher=trainOutT, washout=washout) #zero start state is default
         
 predicted = model.run(input_u=testin, time=testin.shape[0], washout=washout)
 
