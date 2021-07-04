@@ -287,33 +287,115 @@ class ESN:
         _, groupID = np.unique(input_u[:,0], return_index=True)
         groupID = input_u[np.sort(groupID), 0]
         
-        M = np.zeros((numTimeSeq, self.N))
         r = np.zeros((numTimeSeq, self.L))
         
         indexer = 0
-        for i in groupID:
-            mask = (input_u[:, 0] == i)         #grab all rows that have groupID i
-            seqInput = input_u[mask,:]
-            seqTime = seqInput.shape[0]
-            m = np.zeros((seqTime-washout, self.N))#This is for saving all the reservoir states for a sequence which will later be averaged together
-            x = (np.zeros((self.N))).reshape(-1,1)
-            y = (np.zeros((self.L))).reshape(-1,1)
-            for t in range(0,seqTime):
-                u = (seqInput[t,1:]).reshape(-1,1) #We do not need the groupID so its dropped here
-                WdotX = (self.W).dot(x)
-                WinDotU = (self.Win).dot(u)
-                WfbDotY = (self.Wfb).dot(y)
-                innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
-                theTanTerm = resFunc(innerTerm)
-                secondTerm = self.a * theTanTerm
-                x = (1 - self.a) * x + secondTerm
-                if t >= washout:
-                    k = t - washout
-                    m[k,:] = np.transpose(x)
-                y = ((teacher[mask,:])[0]).reshape(-1,1)
-            M[indexer,:] = np.mean(m, axis=0)         #average state activations for entire sequence
-            r[indexer,:] = invFunc((teacher[mask,:])[0])     #we don't need to average this 
-            indexer = indexer + 1
+        if self.isU2Y and not self.isY2Y: #input is connected to readout
+            M = np.zeros((numTimeSeq, self.N+self.K))
+            for i in groupID:
+                mask = (input_u[:, 0] == i)         #grab all rows that have groupID i
+                seqInput = input_u[mask,:]
+                seqTime = seqInput.shape[0]
+                m = np.zeros((seqTime-washout, self.N+self.K))#This is for saving all the reservoir states for a sequence which will later be averaged together
+                x = (np.zeros((self.N))).reshape(-1,1)
+                y = (np.zeros((self.L))).reshape(-1,1)
+                for t in range(0,seqTime):
+                    u = (seqInput[t,1:]).reshape(-1,1) #We do not need the groupID so its dropped here
+                    WdotX = (self.W).dot(x)
+                    WinDotU = (self.Win).dot(u)
+                    WfbDotY = (self.Wfb).dot(y)
+                    innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
+                    theTanTerm = resFunc(innerTerm)
+                    secondTerm = self.a * theTanTerm
+                    x = (1 - self.a) * x + secondTerm
+                    if t >= washout:
+                        k = t - washout
+                        ux = np.concatenate((u, x), axis=0)
+                        m[k,:] = np.transpose(ux)
+                    y = ((teacher[mask,:])[0]).reshape(-1,1)
+                M[indexer,:] = np.mean(m, axis=0)         #average state activations for entire sequence
+                r[indexer,:] = invFunc((teacher[mask,:])[0])     #we don't need to average this 
+                indexer = indexer + 1
+                
+        elif not self.isU2Y and not self.isY2Y: #only reservoir connected to readout
+            M = np.zeros((numTimeSeq, self.N))
+            for i in groupID:
+                mask = (input_u[:, 0] == i)         #grab all rows that have groupID i
+                seqInput = input_u[mask,:]
+                seqTime = seqInput.shape[0]
+                m = np.zeros((seqTime-washout, self.N))#This is for saving all the reservoir states for a sequence which will later be averaged together
+                x = (np.zeros((self.N))).reshape(-1,1)
+                y = (np.zeros((self.L))).reshape(-1,1)
+                for t in range(0,seqTime):
+                    u = (seqInput[t,1:]).reshape(-1,1) #We do not need the groupID so its dropped here
+                    WdotX = (self.W).dot(x)
+                    WinDotU = (self.Win).dot(u)
+                    WfbDotY = (self.Wfb).dot(y)
+                    innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
+                    theTanTerm = resFunc(innerTerm)
+                    secondTerm = self.a * theTanTerm
+                    x = (1 - self.a) * x + secondTerm
+                    if t >= washout:
+                        k = t - washout
+                        m[k,:] = np.transpose(x)
+                    y = ((teacher[mask,:])[0]).reshape(-1,1)
+                M[indexer,:] = np.mean(m, axis=0)         #average state activations for entire sequence
+                r[indexer,:] = invFunc((teacher[mask,:])[0])     #we don't need to average this 
+                indexer = indexer + 1
+
+        elif self.isU2Y and self.isY2Y: #input and self recurrent connections
+            M = np.zeros((numTimeSeq, self.N+self.K+self.L))
+            for i in groupID:
+                mask = (input_u[:, 0] == i)         #grab all rows that have groupID i
+                seqInput = input_u[mask,:]
+                seqTime = seqInput.shape[0]
+                m = np.zeros((seqTime-washout, self.N+self.K+self.L))#This is for saving all the reservoir states for a sequence which will later be averaged together
+                x = (np.zeros((self.N))).reshape(-1,1)
+                y = (np.zeros((self.L))).reshape(-1,1)
+                for t in range(0,seqTime):
+                    u = (seqInput[t,1:]).reshape(-1,1) #We do not need the groupID so its dropped here
+                    WdotX = (self.W).dot(x)
+                    WinDotU = (self.Win).dot(u)
+                    WfbDotY = (self.Wfb).dot(y)
+                    innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
+                    theTanTerm = resFunc(innerTerm)
+                    secondTerm = self.a * theTanTerm
+                    x = (1 - self.a) * x + secondTerm
+                    if t >= washout:
+                        k = t - washout
+                        uxy = np.concatenate((u, x, y), axis=0)
+                        m[k,:] = np.transpose(uxy)
+                    y = ((teacher[mask,:])[0]).reshape(-1,1)
+                M[indexer,:] = np.mean(m, axis=0)         #average state activations for entire sequence
+                r[indexer,:] = invFunc((teacher[mask,:])[0])     #we don't need to average this 
+                indexer = indexer + 1
+
+        elif not self.isU2Y and self.isY2Y: #self recurrent connections
+            M = np.zeros((numTimeSeq, self.N+self.L))
+            for i in groupID:
+                mask = (input_u[:, 0] == i)         #grab all rows that have groupID i
+                seqInput = input_u[mask,:]
+                seqTime = seqInput.shape[0]
+                m = np.zeros((seqTime-washout, self.N+self.L))#This is for saving all the reservoir states for a sequence which will later be averaged together
+                x = (np.zeros((self.N))).reshape(-1,1)
+                y = (np.zeros((self.L))).reshape(-1,1)
+                for t in range(0,seqTime):
+                    u = (seqInput[t,1:]).reshape(-1,1) #We do not need the groupID so its dropped here
+                    WdotX = (self.W).dot(x)
+                    WinDotU = (self.Win).dot(u)
+                    WfbDotY = (self.Wfb).dot(y)
+                    innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
+                    theTanTerm = resFunc(innerTerm)
+                    secondTerm = self.a * theTanTerm
+                    x = (1 - self.a) * x + secondTerm
+                    if t >= washout:
+                        k = t - washout
+                        xy = np.concatenate((x, y), axis=0)
+                        m[k,:] = np.transpose(xy)
+                    y = ((teacher[mask,:])[0]).reshape(-1,1)
+                M[indexer,:] = np.mean(m, axis=0)         #average state activations for entire sequence
+                r[indexer,:] = invFunc((teacher[mask,:])[0])     #we don't need to average this 
+                indexer = indexer + 1
         self.M = M
         self.T = r
         return
@@ -480,29 +562,99 @@ class ESN:
         
         outputs = np.zeros((numTimeSeq, self.L))
         indexer = 0
-        for i in groupID:
-            mask = (input_u[:, 0] == i)         #grab all rows that have groupID i
-            seqInput = input_u[mask,:]
-            seqTime = seqInput.shape[0]
-            x = (np.zeros((1,self.N))).reshape(-1,1) 
-            y = (np.zeros((1,self.L))).reshape(-1,1) 
-            for t in range(0,seqTime):
-                u = (seqInput[t,1:]).reshape(-1,1) #we can ignore the group ID now
-                WdotX = (self.W).dot(x)
-                WinDotU = (self.Win).dot(u)
-                WfbDotY = (self.Wfb).dot(y)
-                innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
-                theTanTerm = resFunc(innerTerm)
-                secondTerm = self.a * theTanTerm
-                x = (1 - self.a) * x + secondTerm
-                y = outFunc(((self.Wout).dot(x)).reshape(-1,1))
-                if t >= washout:
-                    outputs[indexer,:] = outputs[indexer,:] + y.reshape(-1,self.L)
-            outputs[indexer,:] = outputs[indexer,:] / seqTime         #average state activations for entire sequence
-            indexer = indexer + 1
+        if self.isU2Y and not self.isY2Y:#input connected to readout
+            for i in groupID:
+                mask = (input_u[:, 0] == i)         #grab all rows that have groupID i
+                seqInput = input_u[mask,:]
+                seqTime = seqInput.shape[0]
+                x = (np.zeros((1,self.N))).reshape(-1,1) 
+                y = (np.zeros((1,self.L))).reshape(-1,1) 
+                for t in range(0,seqTime):
+                    u = (seqInput[t,1:]).reshape(-1,1) #we can ignore the group ID now
+                    WdotX = (self.W).dot(x)
+                    WinDotU = (self.Win).dot(u)
+                    WfbDotY = (self.Wfb).dot(y)
+                    innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
+                    theTanTerm = resFunc(innerTerm)
+                    secondTerm = self.a * theTanTerm
+                    x = (1 - self.a) * x + secondTerm
+                    ux = np.concatenate((u, x), axis=0)
+                    y = outFunc(((self.Wout).dot(ux)).reshape(-1,1))
+                    if t >= washout:
+                        outputs[indexer,:] = outputs[indexer,:] + y.reshape(-1,self.L)
+                outputs[indexer,:] = outputs[indexer,:] / seqTime         #average state activations for entire sequence
+                indexer = indexer + 1
+                
+        elif not self.isU2Y and not self.isY2Y:#only reservoir connected
+            for i in groupID:
+                mask = (input_u[:, 0] == i)         #grab all rows that have groupID i
+                seqInput = input_u[mask,:]
+                seqTime = seqInput.shape[0]
+                x = (np.zeros((1,self.N))).reshape(-1,1) 
+                y = (np.zeros((1,self.L))).reshape(-1,1) 
+                for t in range(0,seqTime):
+                    u = (seqInput[t,1:]).reshape(-1,1) #we can ignore the group ID now
+                    WdotX = (self.W).dot(x)
+                    WinDotU = (self.Win).dot(u)
+                    WfbDotY = (self.Wfb).dot(y)
+                    innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
+                    theTanTerm = resFunc(innerTerm)
+                    secondTerm = self.a * theTanTerm
+                    x = (1 - self.a) * x + secondTerm
+                    y = outFunc(((self.Wout).dot(x)).reshape(-1,1))
+                    if t >= washout:
+                        outputs[indexer,:] = outputs[indexer,:] + y.reshape(-1,self.L)
+                outputs[indexer,:] = outputs[indexer,:] / seqTime         #average state activations for entire sequence
+                indexer = indexer + 1
+                
+        elif self.isU2Y and self.isY2Y: #input and self recurrent
+            for i in groupID:
+                mask = (input_u[:, 0] == i)         #grab all rows that have groupID i
+                seqInput = input_u[mask,:]
+                seqTime = seqInput.shape[0]
+                x = (np.zeros((1,self.N))).reshape(-1,1) 
+                y = (np.zeros((1,self.L))).reshape(-1,1) 
+                for t in range(0,seqTime):
+                    u = (seqInput[t,1:]).reshape(-1,1) #we can ignore the group ID now
+                    WdotX = (self.W).dot(x)
+                    WinDotU = (self.Win).dot(u)
+                    WfbDotY = (self.Wfb).dot(y)
+                    innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
+                    theTanTerm = resFunc(innerTerm)
+                    secondTerm = self.a * theTanTerm
+                    x = (1 - self.a) * x + secondTerm
+                    uxy = np.concatenate((u, x, y), axis=0)
+                    y = outFunc(((self.Wout).dot(uxy)).reshape(-1,1))
+                    if t >= washout:
+                        outputs[indexer,:] = outputs[indexer,:] + y.reshape(-1,self.L)
+                outputs[indexer,:] = outputs[indexer,:] / seqTime         #average state activations for entire sequence
+                indexer = indexer + 1
+        elif not self.isU2Y and self.isY2Y: #self recurrent
+            for i in groupID:
+                mask = (input_u[:, 0] == i)         #grab all rows that have groupID i
+                seqInput = input_u[mask,:]
+                seqTime = seqInput.shape[0]
+                x = (np.zeros((1,self.N))).reshape(-1,1) 
+                y = (np.zeros((1,self.L))).reshape(-1,1) 
+                for t in range(0,seqTime):
+                    u = (seqInput[t,1:]).reshape(-1,1) #we can ignore the group ID now
+                    WdotX = (self.W).dot(x)
+                    WinDotU = (self.Win).dot(u)
+                    WfbDotY = (self.Wfb).dot(y)
+                    innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
+                    theTanTerm = resFunc(innerTerm)
+                    secondTerm = self.a * theTanTerm
+                    x = (1 - self.a) * x + secondTerm
+                    xy = np.concatenate((x, y), axis=0)
+                    y = outFunc(((self.Wout).dot(xy)).reshape(-1,1))
+                    if t >= washout:
+                        outputs[indexer,:] = outputs[indexer,:] + y.reshape(-1,self.L)
+                outputs[indexer,:] = outputs[indexer,:] / seqTime         #average state activations for entire sequence
+                indexer = indexer + 1
+        
         b = np.zeros_like(outputs)
         b[np.arange(len(outputs)), outputs.argmax(1)] = 1
-        return b
+        return outputs, b
     
     '''No transform in reservoir state, input is connected to output units'''
     def runU2Y(self, time, input_u, x, y, washout):

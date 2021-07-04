@@ -24,6 +24,17 @@ def esnClassRep(data, uniqueClasses):
     
     for i in range(0, data.shape[0]):
         rowTarget = int(data[i,-1])
+        targets[i,rowTarget] = 0.99999
+        
+    data = data[:,:-1]
+    data = np.concatenate((data,targets), axis=1)
+    return data
+
+def standardClassRep(data, uniqueClasses):
+    targets = np.zeros((data.shape[0],uniqueClasses))
+    
+    for i in range(0, data.shape[0]):
+        rowTarget = int(data[i,-1])
         targets[i,rowTarget] = 1
         
     data = data[:,:-1]
@@ -42,7 +53,6 @@ def compressTargets(features, output):
         r[indexer,:] = (output[mask,:])[0]     #we don't need to average this 
         indexer = indexer + 1
     return r
-    
 
 def ttvSplit(data, numClasses):
     data = pd.DataFrame(data)
@@ -70,13 +80,16 @@ def ttvSplit(data, numClasses):
 
 np.random.seed(0)
 df = pd.read_csv('data.csv')
-#df = df.loc[df.iloc[:,-1].isin([0,9])]
+df = df.loc[df.iloc[:,-1].isin([0,4])]
 df = df.to_numpy()
-df = esnClassRep(df,10)
-trainin, trainout, testin, testout, valin, valout = ttvSplit(df, 10)
+sdf = standardClassRep(df, 5)
+df = esnClassRep(df,5)
+trainin, trainout, testin, testout, valin, valout = ttvSplit(df, 5)
+np.random.seed(0)
+strainin, strainout, stestin, stestout, svalin, svalout = ttvSplit(sdf, 5)
 
 model = esn(K = 85,
-            L = 10,
+            L = 5,
             N = 200,
             p = 0.7,
             a = 1,
@@ -97,18 +110,17 @@ model = esn(K = 85,
             isY2Y = False,
             isClassification = True)
 
-seed = 3#np.random.randint(0,100)
+seed = 3 #np.random.randint(0,100)
 washout = 10
 model.generateW(seed)
 model.generateWin(seed)
 model.generateWfb(seed)
 
-trainOutT = np.tanh(trainout)
-model.train(input_u = trainin, teacher=trainOutT, washout=washout) #zero start state is default
+model.train(input_u = trainin, teacher=trainout, washout=washout) #zero start state is default
         
-predicted = model.run(input_u=testin, time=testin.shape[0], washout=washout)
+probabilities, predicted = model.run(input_u=testin, time=testin.shape[0], washout=washout)
 
-testout = compressTargets(testin, testout)
+testout = compressTargets(testin, stestout)
 score = f1(testout, predicted, average='samples')
 print(score)
 print(seed)

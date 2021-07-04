@@ -55,7 +55,7 @@ model = esn(K = 4,
             outAlg = 1,
             B = 0.0001,
             distribution = 0,
-            isBias = False,
+            isBias = True,
             isU2Y = True,
             isY2Y = False,
             isClassification = True)
@@ -68,6 +68,7 @@ model.generateWfb(seed)
 
 model.train(input_u = trainin, teacher=trainout, washout=washout) #zero start state is default
         
-predicted = model.run(input_u=testin, time=testin.shape[0])
+probabilities, predicted = model.run(input_u=testin, time=testin.shape[0])
 score = f1(testout, predicted, average='samples')
 print(score)
+print(probabilities)

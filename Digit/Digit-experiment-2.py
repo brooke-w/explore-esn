@@ -23,14 +23,17 @@ from os import path
 j = 12
 k = 24
 
-def getScores(actual, predicted): 
+def getScores(actual, predicted, probabilities): 
     np.seterr(all='raise')
     try:
         f1Score = f1(actual, predicted, average='samples')
+        #print(f1Score)
         
-        aucScore = rocAuc(actual, predicted)
+        aucScore = rocAuc(actual, probabilities)
+        #print(aucScore)
         
         accuracyScore = accuracy_score(actual, predicted)
+        #print(accuracyScore)
         
     except FloatingPointError:
         print('Exceptionally bad generation of ESN. Aborting sub-trial. (1)')
@@ -75,7 +78,20 @@ def ttvSplit(data, numClasses):
 #If all the classes are in a single column, this function
 #will break up that representation into multiple columns
 #for the ESN
+#0 and 0.99999 rep (inverse arctanh does not accept value of 1)
 def esnClassRep(data, uniqueClasses):
+    targets = np.zeros((data.shape[0],uniqueClasses))
+    
+    for i in range(0, data.shape[0]):
+        rowTarget = int(data[i,-1])
+        targets[i,rowTarget] = 0.99999
+        
+    data = data[:,:-1]
+    data = np.concatenate((data,targets), axis=1)
+    return data
+
+#0 and 1 rep
+def standardClassRep(data, uniqueClasses):
     targets = np.zeros((data.shape[0],uniqueClasses))
     
     for i in range(0, data.shape[0]):
@@ -101,7 +117,6 @@ def compressTargets(features, output):
 
 def objective(trial, args, trainin, trainout, testin, testout):
     # Parameters (to tune)
-    #N = trial.suggest_int('N', 10,100) For Jaeger et al's work we know 20 neurons was sufficient and we can always scale up
     np.seterr(all='warn')
     p = trial.suggest_uniform("p", 0.02, 1.0)
     a = trial.suggest_uniform("a", 0.02, 1.0)
@@ -140,20 +155,19 @@ def objective(trial, args, trainin, trainout, testin, testout):
     seedUsed = 100
     f1Score, aucScore, accuracyScore = 0,0,0
     for step in range (0,10):
-        np.seterr(all='warn')
         model.generateW(seed)
         model.generateWin(seed)
         model.generateWfb(seed)
         
         model.train(input_u = trainin, teacher=trainout, washout=washout) #zero start state is default
                 
-        predicted = model.run(input_u=testin, time=testin.shape[0], washout=washout)
+        probabilities, predicted = model.run(input_u=testin, time=testin.shape[0], washout=washout)
         
         if np.isnan(np.min(predicted)):
             print('Exceptionally bad generation of ESN. Aborting sub-trial. (2)')
             f1Score = -1
         else:
-            f1Score, aucScore, accuracyScore = getScores(testout, predicted)
+            f1Score, aucScore, accuracyScore = getScores(testout, predicted, probabilities)
         if f1Score > bestF1:
             bestF1 = f1Score
             bestAuc = aucScore
@@ -171,20 +185,21 @@ def objective(trial, args, trainin, trainout, testin, testout):
     trial.set_user_attr('outFunc', args.outFunc)
     trial.set_user_attr('distribution', args.distribution)
     
-    np.seterr(all='warn')
     return bestF1
 
 def main():
+    np.random.seed(0)
     #Generate Data
     numClasses = 5
     df = pd.read_csv('data.csv')
     df = df.loc[df.iloc[:,-1].isin(np.arange(0,numClasses))]
     df = df.to_numpy()
+    sdf = standardClassRep(df, numClasses)
     df = esnClassRep(df,numClasses)
     trainin, trainout, testin, testout, valin, valout = ttvSplit(df, numClasses)
-    testout = compressTargets(testin, testout)
-    trainoutT = np.tanh(trainout) #The inverse arctanh function is not defined for 1 so transforming the outputs allows use of tanh reservoir activation for training
-    #We don't have to undo the transform because the ESN classifier automatically rounds and returns one for the best choice class
+    np.random.seed(0)
+    strainin, strainout, stestin, stestout, svalin, svalout = ttvSplit(sdf, numClasses)
+    stestout = compressTargets(testin, stestout)
     
     global j,k
     for i in range(j,k):
@@ -219,7 +234,7 @@ def main():
             study = optuna.create_study(study_name=study_name, sampler = optuna.samplers.TPESampler(seed=0), direction='maximize')
         start = time.time() 
         # Optimize:
-        study.optimize(lambda trial: objective(trial, args, trainin, trainoutT, testin, testout), n_trials=50)
+        study.optimize(lambda trial: objective(trial, args, trainin, trainout, testin, stestout), n_trials=50)
         end = time.time()
         print("\n")
         print(end-start, "seconds")

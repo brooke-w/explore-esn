@@ -269,27 +269,51 @@ class ESN:
         self.T = r
         return
     
-        '''input and previous output are not used in calculating prediction'''
-    def trainClassification(self, time, input_u, teacher, r, x, y, washout):
+    '''
+    Precondition: Input must have group_id in first column to identify individual sequences to classify. 
+    This method should never be used for feedback only reservoirs, i.e. where the input comes from the previous output
+    
+    Postcondition: Writes time averaged reservoir states in M and teacher output to T, contained in the ESN object
+    
+    Notes: This method was wrote with a specific benchmark in mind that has time varying sequences i.e. not all the
+    same length.
+    '''
+    def trainClassification(self, time, input_u, teacher, washout):
         resFunc = self.resFunc                                           #reservoir activation function
         invFunc = self.invFunc                                           #inverse of the output activation function needed for training
-        
-        M = np.zeros((time-washout, self.N))                         
 
-        for t in range(0,time):
-            u = (input_u[t,:]).reshape(-1,1)
-            WdotX = (self.W).dot(x)
-            WinDotU = (self.Win).dot(u)
-            WfbDotY = (self.Wfb).dot(y)
-            innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
-            theTanTerm = resFunc(innerTerm)
-            secondTerm = self.a * theTanTerm
-            x = (1 - self.a) * x + secondTerm
-            if t >= washout:
-                k = t - washout
-                M[k,:] = np.transpose(x)
-                r[k,:] = invFunc(teacher[t, :])
-            y = (teacher[t,:]).reshape(-1,1)
+        #split input_u into individual time sequences for processing
+        numTimeSeq = np.unique(input_u[:,0]).shape[0]    #get number of unique time sequences
+        _, groupID = np.unique(input_u[:,0], return_index=True)
+        groupID = input_u[np.sort(groupID), 0]
+        
+        M = np.zeros((numTimeSeq, self.N))
+        r = np.zeros((numTimeSeq, self.L))
+        
+        indexer = 0
+        for i in groupID:
+            mask = (input_u[:, 0] == i)         #grab all rows that have groupID i
+            seqInput = input_u[mask,:]
+            seqTime = seqInput.shape[0]
+            m = np.zeros((seqTime-washout, self.N))#This is for saving all the reservoir states for a sequence which will later be averaged together
+            x = (np.zeros((self.N))).reshape(-1,1)
+            y = (np.zeros((self.L))).reshape(-1,1)
+            for t in range(0,seqTime):
+                u = (seqInput[t,1:]).reshape(-1,1) #We do not need the groupID so its dropped here
+                WdotX = (self.W).dot(x)
+                WinDotU = (self.Win).dot(u)
+                WfbDotY = (self.Wfb).dot(y)
+                innerTerm = WdotX + WinDotU + WfbDotY + (self.sv*self.v[t]).reshape(-1,1)
+                theTanTerm = resFunc(innerTerm)
+                secondTerm = self.a * theTanTerm
+                x = (1 - self.a) * x + secondTerm
+                if t >= washout:
+                    k = t - washout
+                    m[k,:] = np.transpose(x)
+                y = ((teacher[mask,:])[0]).reshape(-1,1)
+            M[indexer,:] = np.mean(m, axis=0)         #average state activations for entire sequence
+            r[indexer,:] = invFunc((teacher[mask,:])[0])     #we don't need to average this 
+            indexer = indexer + 1
         self.M = M
         self.T = r
         return
@@ -391,7 +415,7 @@ class ESN:
         
         #send off to appropriate train function based on selections
         if self.isClassification:
-            self.trainClassification(time, input_u, teacher, r, x, y, washout)
+            self.trainClassification(time, input_u, teacher, washout)
         else:    
             if not(self.isU2Y) and not(self.isY2Y):
                 self.trainBasic(time, input_u, teacher, r, x, y, washout)
@@ -441,13 +465,29 @@ class ESN:
                     outputs[t-washout,:] = y.reshape(-1,self.L)
         return outputs
     
-    '''No transforms on the reservoir state, input and previous output are not used in calculating prediction'''
-    def runClassification(self, time, input_u, x, y, washout):
+    '''Precondition: Assumes first column of input is a groupID, regardless if it's predicting one
+    sequence or multiple
+    
+    Postcondition: Returns classification'''
+    def runClassification(self, time, input_u, washout):
         resFunc = self.resFunc                                           #reservoir activation function
-        outFunc = self.outFunc 
-        outputs = np.zeros((time-washout, self.L))
-        for t in range(0,time):
-                u = (input_u[t]).reshape(-1,1)
+        outFunc = self.outFunc                                           #inverse of the output activation function needed for training
+
+        #split input_u into individual time sequences for processing
+        numTimeSeq = np.unique(input_u[:,0]).shape[0]   #get number of unique time sequences
+        _, groupID = np.unique(input_u[:,0], return_index=True)
+        groupID = input_u[np.sort(groupID), 0]
+        
+        outputs = np.zeros((numTimeSeq, self.L))
+        indexer = 0
+        for i in groupID:
+            mask = (input_u[:, 0] == i)         #grab all rows that have groupID i
+            seqInput = input_u[mask,:]
+            seqTime = seqInput.shape[0]
+            x = (np.zeros((1,self.N))).reshape(-1,1) 
+            y = (np.zeros((1,self.L))).reshape(-1,1) 
+            for t in range(0,seqTime):
+                u = (seqInput[t,1:]).reshape(-1,1) #we can ignore the group ID now
                 WdotX = (self.W).dot(x)
                 WinDotU = (self.Win).dot(u)
                 WfbDotY = (self.Wfb).dot(y)
@@ -457,8 +497,12 @@ class ESN:
                 x = (1 - self.a) * x + secondTerm
                 y = outFunc(((self.Wout).dot(x)).reshape(-1,1))
                 if t >= washout:
-                    outputs[t-washout,:] = y.reshape(-1,self.L)
-        return outputs
+                    outputs[indexer,:] = outputs[indexer,:] + y.reshape(-1,self.L)
+            outputs[indexer,:] = outputs[indexer,:] / seqTime         #average state activations for entire sequence
+            indexer = indexer + 1
+        b = np.zeros_like(outputs)
+        b[np.arange(len(outputs)), outputs.argmax(1)] = 1
+        return b
     
     '''No transform in reservoir state, input is connected to output units'''
     def runU2Y(self, time, input_u, x, y, washout):
@@ -552,7 +596,7 @@ class ESN:
         outputs = None
                 #send off to appropriate train function based on selections
         if self.isClassification:
-            self.runClassification(time, input_u, x, y, washout)
+            outputs = self.runClassification(time, input_u, washout)
         else:    
             if not(self.isU2Y) and not(self.isY2Y):
                 outputs = self.runBasic(time, input_u, x, y, washout)
